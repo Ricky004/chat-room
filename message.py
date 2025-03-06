@@ -6,7 +6,8 @@ HEADER = 4
 MAX_BYTES = 512
 
 class Message:
-
+    '''A class to represent a message in a chatroom'''
+    
     def __init__(self, message: str = None): 
         self.data = bytearray(HEADER + MAX_BYTES)
         if message is None:
