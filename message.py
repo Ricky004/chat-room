@@ -10,7 +10,7 @@ class Message:
         if message is None:
             self.body = b""
         else:
-            self.body = message[:MAX_BYTES].encode("utf-8")
+            self.body = message[:MAX_BYTES].encode("utf-8") if isinstance(message, str) else message[:MAX_BYTES]
         
         self.body_length = len(self.body)
         self.header = struct.pack("!I", self.body_length)
@@ -41,5 +41,5 @@ class Message:
         if body_length > MAX_BYTES:
             raise ValueError("Data too long")
 
-        body = raw_data[HEADER:HEADER + body_length].decode()
+        body = raw_data[HEADER:HEADER + body_length]
         return Message(body)      
