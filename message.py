@@ -1,6 +1,4 @@
-import socket
-import threading
-
+import struct
 
 HEADER = 4
 MAX_BYTES = 512
@@ -8,37 +6,40 @@ MAX_BYTES = 512
 class Message:
     '''A class to represent a message in a chatroom'''
     
-    def __init__(self, message: str = None): 
-        self.data = bytearray(HEADER + MAX_BYTES)
+    def __init__(self, message: str | None): 
         if message is None:
-            self.body_length = 0
+            self.body = b""
         else:
-            self.body_length = self.get_new_body_length(len(message))
-            self.encode_header()
-            self.data[HEADER:HEADER+MAX_BYTES] = message[:self.body_length]
-
-    def get_new_body_length(self, new_length: int) -> int:
-        if new_length > MAX_BYTES:
-            return MAX_BYTES
-        else:
-            return new_length
+            self.body = message[:MAX_BYTES].encode("utf-8")
         
-    def encode_header(self):
-        new_header = bytearray(HEADER + 1)
-        print(f"{int(self.body_length):4d}")
-        self.data[:HEADER] = new_header[:HEADER]
-        return self.data
+        self.body_length = len(self.body)
+        self.header = struct.pack("!I", self.body_length)
+        self.data = self.header + self.body  
 
     def decode_header(self) -> bool:
-        new_header = bytearray(HEADER + 1)
-        new_header[:HEADER] = self.data[:HEADER]
-        new_header[HEADER] = "\0"
-        header_value = int(new_header)
-        if header_value > MAX_BYTES:
-            self.body_length = 0
+        if len(self.header) < HEADER:
+           print("Invalid header length")
+           return False
+       
+        self.body_length = struct.unpack("!I", self.data[:HEADER])[0]
+        if self.body_length > MAX_BYTES:
+            print("Message too long")
             return False
-        else:
-            self.body_length = header_value
-            return True
+        return True
 
-        
+    def get_data(self) -> bytes:
+        return self.data  
+
+    @staticmethod
+    def from_bytes(raw_data: bytes):
+        if len(raw_data) < HEADER:
+            raise ValueError("Data too short")
+
+        header = raw_data[:HEADER]
+        body_length = struct.unpack("!I", header)[0]
+
+        if body_length > MAX_BYTES:
+            raise ValueError("Data too long")
+
+        body = raw_data[HEADER:HEADER + body_length].decode()
+        return Message(body)      
