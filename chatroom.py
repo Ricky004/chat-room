@@ -4,7 +4,6 @@ import struct
 from collections import deque
 
 from message import Message, HEADER, MAX_BYTES
-from client import ChatClient
 
 
 MAX_PARTICIPANTS = 10
@@ -114,7 +113,7 @@ class Session(Participant):
                     msg = Message.from_bytes(full_message)
 
                     # Step 5: Properly handle the received message
-                    self.handle_incoming_message(len(msg))
+                    self.handle_incoming_message(msg)
 
                 except Exception as e:
                     print(f"Error reading message from {self.username}: {e}")
@@ -133,21 +132,24 @@ class Session(Participant):
         return data
     
 
-    def handle_incoming_message(self, raw_message: bytes):
+    def handle_incoming_message(self, message: Message): 
         try:
-            message = Message.from_bytes(raw_message)
-            
+            # message is already a Message instance
+            print(f"DEBUG: Message type -> {type(message)}")
+            print(f"DEBUG: Message body -> {message.body}")
+
             decoded_body = message.body.decode("utf-8") if isinstance(message.body, bytes) else message.body
-            
+
             print(f"Message from {self.username}: {decoded_body}")
-            
+
             formatted_message = f"{self.username}: {decoded_body}"
-            broadcast_message = Message(formatted_message)
-            
+            broadcast_message = Message(formatted_message)  # Initialize with the string
+
             self.room.broadcast(broadcast_message, self)
-            
+
         except Exception as e:
             print(f"Error handling incoming message: {e}")
+
 
 
     def process_outgoing_messages(self):
@@ -208,30 +210,10 @@ class ChatServer:
 
             session = Session(client_socket, self.room)
             session.start()
-
+            
 
 if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) > 1 and sys.argv[1] == "client":
-        # Run as client
-        username = sys.argv[2] if len(sys.argv) > 2 else f"User-{id(object()) % 1000}"
-        client = ChatClient("localhost", 12345, username)
-        
-        if client.connect():
-            print(f"Connected as {username}. Type your messages (or 'quit' to exit):")
-            try:
-                while True:
-                    message = input("> ")
-                    if message.lower() == "quit":
-                        break
-                    client.send_message(message)
-            except KeyboardInterrupt:
-                print("\nExiting...")
-            finally:
-                client.close()
-    else:
-        # Run as server
-        server = ChatServer("localhost", 12345)
-        print("Chat server starting...")
-        server.start()        
+    host = input("Enter server IP (e.g., localhost): ")
+    port = int(input("Enter server port (e.g., 12345): "))
+    server = ChatServer(host, port)
+    server.start()

@@ -89,6 +89,7 @@ class ChatClient:
         self.socket.close()
         print("Disconnected from server")
 
+
 if __name__ == "__main__":
     host = input("Enter server IP: ")
     port = int(input("Enter server port: "))
@@ -96,9 +97,10 @@ if __name__ == "__main__":
     
     client = ChatClient(host, port, username)
     if client.connect():
+        print(f"Connected as {username}. Type your messages (or 'exit' to quit):")
         while True:
-            message = input()
+            message = input("> ")
             if message.lower() == "exit":
-                client.close()
+                client.socket.close()
                 break
-            client.send_message(message)
+            client.send_message(f"{username}: {message}")
