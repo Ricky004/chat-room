@@ -67,6 +67,10 @@ class Session(Participant):
         self.process_outgoing_messages()
 
 
+    def write(self, message: Message):
+        self.message_queue.append(message)
+
+
     def _start_message_threads(self):
         read_thread = threading.Thread(target=self._message_reader_loop, daemon=True)
         write_thread = threading.Thread(target=self._message_writer_loop, daemon=True)

@@ -1,106 +1,99 @@
+import curses
 import socket
 import threading
 import struct
 
 from message import Message, HEADER, MAX_BYTES
 
-class ChatClient:
-    def __init__(self, host: str, port: int, username: str):
-        self.host = host
-        self.port = port
-        self.username = username
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.running = False
-    
-    def connect(self):
+
+def recv_exact(sock, num_bytes):
+    data = b""
+    while len(data) < num_bytes:
+        chunk = sock.recv(num_bytes - len(data))
+        if not chunk:
+            return None
+        data += chunk
+    return data
+
+def receive_messages(chat_win, sock):
+    while True:
         try:
-            self.socket.connect((self.host, self.port))
-            self.running = True
-            print(f"Connected to server at {self.host}:{self.port}")
-            
-            # Start thread for receiving messages
-            receive_thread = threading.Thread(target=self._receive_messages, daemon=True)
-            receive_thread.start()
-            
-            return True
+            header_bytes = recv_exact(sock, HEADER)
+            if not header_bytes:
+                break
+
+            msg_length = struct.unpack("!I", header_bytes)[0]
+            if msg_length <= 0 or msg_length > MAX_BYTES:
+                break
+
+            message_bytes = recv_exact(sock, msg_length)
+            if not message_bytes:
+                break
+
+            # Decode and display the incoming message
+            message = message_bytes.decode("utf-8")
+            chat_win.addstr(message + "\n")
+            chat_win.refresh()
         except Exception as e:
-            print(f"Failed to connect: {e}")
-            return False
+            chat_win.addstr(f"Error receiving message: {e}\n")
+            chat_win.refresh()
+            break
+
+def main(stdscr):
+    # Enable echo so that characters appear as you type
+    curses.echo()
+    curses.curs_set(1)
+    stdscr.clear()
+    height, width = stdscr.getmaxyx()
     
-    def send_message(self, text: str):
-        if not self.running:
-            print("Not connected to server")
-            return False
+    # Create a window for chat messages and another for input
+    chat_win = curses.newwin(height - 3, width, 0, 0)
+    input_win = curses.newwin(3, width, height - 3, 0)
+    chat_win.scrollok(True)  # Allow chat window to scroll
+
+    # Setup connection parameters
+    host = "127.0.0.1"  # Replace with your server IP if needed
+    port = 12345        # Replace with your server port
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((host, port))
+        chat_win.addstr(f"Connected to server at {host}:{port}\n")
+        chat_win.refresh()
+    except Exception as e:
+        chat_win.addstr(f"Failed to connect: {e}\n")
+        chat_win.refresh()
+        return
+
+    # Start a thread to receive messages from the server
+    threading.Thread(target=receive_messages, args=(chat_win, sock), daemon=True).start()
+    
+    while True:
+        input_win.clear()
+        input_win.addstr("Your message: ")
+        input_win.refresh()
+        
+        # Block until the user types a message and presses Enter
+        msg = input_win.getstr().decode("utf-8")
+        if msg.lower() == "exit":
+            break
         
         try:
-            message = Message(text)
-            self.socket.sendall(message.get_data())
-            return True
+            # Construct the full message with a label
+            full_msg = f"You: {msg}"
+            message = Message(full_msg)
+            sock.sendall(message.get_data())
+            
+            # Append the sent message to the chat window immediately
+            chat_win.addstr(full_msg + "\n")
+            chat_win.refresh()
         except Exception as e:
-            print(f"Error sending message: {e}")
-            self.running = False
-            return False
-    
-    def _receive_messages(self):
-        while self.running:
-            try:
-                # Read header
-                header_bytes = self._recv_exact(HEADER)
-                if not header_bytes:
-                    print("Disconnected from server")
-                    self.running = False
-                    break
-                
-                # Get message length
-                msg_length = struct.unpack("!I", header_bytes)[0]
-                if msg_length <= 0 or msg_length > MAX_BYTES:
-                    print(f"Invalid message length: {msg_length}")
-                    self.running = False
-                    break
-                
-                # Read message body
-                message_bytes = self._recv_exact(msg_length)
-                if not message_bytes:
-                    print("Disconnected while reading message")
-                    self.running = False
-                    break
-                
-                # Display the message
-                message = message_bytes.decode("utf-8")
-                print(message)
-                
-            except Exception as e:
-                print(f"Error receiving message: {e}")
-                self.running = False
-                break
-    
-    def _recv_exact(self, num_bytes: int) -> bytes:
-        data = b""
-        while len(data) < num_bytes:
-            chunk = self.socket.recv(num_bytes - len(data))
-            if not chunk:
-                return None
-            data += chunk
-        return data
-    
-    def close(self):
-        """Close the connection to the server"""
-        self.running = False
-        self.socket.close()
-        print("Disconnected from server")
+            chat_win.addstr(f"Error sending message: {e}\n")
+            chat_win.refresh()
 
+    sock.close()
+    chat_win.addstr("Disconnected from server.\n")
+    chat_win.refresh()
+    curses.napms(1500)
 
 if __name__ == "__main__":
-    host = input("Enter server IP: ")
-    port = int(input("Enter server port: "))
-    username = input("Enter your username: ")
-    
-    client = ChatClient(host, port, username)
-    if client.connect():
-        print(f"Connected as {username}. Type your messages (or 'exit' to quit):")
-        while True:
-            message = input("> ")
-            if message.lower() == "exit":
-                client.socket.close()
-                break
-            client.send_message(f"{username}: {message}")
+    curses.wrapper(main)
